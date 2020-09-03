@@ -84,6 +84,11 @@ namespace HmsPlugin
             );
         }
 
+        public bool IsRewardAdLoaded()
+        {
+            return rewardAd?.Loaded == true;
+        }
+
         public void ShowRewardedAd()
         {
             Debug.Log("[HMS] AdsManager ShowRewardedAd");

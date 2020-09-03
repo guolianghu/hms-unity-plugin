@@ -1,6 +1,7 @@
 ﻿
 
 #if UNITY_PURCHASING
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using HuaweiMobileServices.IAP;
@@ -9,6 +10,8 @@ using UnityEngine.Purchasing;
 using UnityEngine.Purchasing.Extension;
 using System.Linq;
 using System.Text;
+using UnityEngine;
+using UnityGameFramework.Runtime;
 
 
 namespace HmsPlugin
@@ -66,6 +69,8 @@ namespace HmsPlugin
 
         void ClientInitFailed(HMSException exception)
         {   
+            Log.Warning("[HuaweiStore]ClientInitFailed code:{0} msg:{1} WrappedCauseMessage:{2}", exception.ErrorCode,
+                exception.Message, exception.WrappedCauseMessage);
             this.storeEvents.OnSetupFailed(InitializationFailureReason.PurchasingUnavailable);
         }
 
@@ -101,9 +106,17 @@ namespace HmsPlugin
 
         private void CreateProductRequest(List<string> consumablesIDs, HuaweiConstants.IAP.IapType type, System.Action onSuccess)
         {
+            if (consumablesIDs.Count <= 0)
+            {
+                onSuccess?.Invoke();
+                return;
+            }
+            
             var productsDataRequest        = new ProductInfoReq();
             productsDataRequest.PriceType  = (int)type;
             productsDataRequest.ProductIds = consumablesIDs;
+            Log.Info("[HuaweiStore]CreateProductRequest type:{0} consumablesIDs:{1}", 
+                type, string.Join(",", consumablesIDs));
 
             var task = iapClient.ObtainProductInfo(productsDataRequest);
             task.AddOnFailureListener(GetProductsFailure);
@@ -112,6 +125,8 @@ namespace HmsPlugin
 
         void GetProductsFailure(HMSException exception)
         {   
+            Log.Warning("[HuaweiStore]GetProductsFailure code:{0} msg:{1} WrappedExceptionMessage:{2}", exception.ErrorCode,
+                exception.Message, exception.WrappedExceptionMessage);
             this.storeEvents.OnSetupFailed(InitializationFailureReason.PurchasingUnavailable);
         }
 
@@ -190,16 +205,33 @@ namespace HmsPlugin
             this.storeEvents.OnProductsRetrieved(descList);
         }
 
+        // class ReceiptWrapper
+        // {
+        //     public const string Store = "AppGallery";
+        //     public string TransactionID;
+        //     public string Payload;
+        //     public string product;
+        //     public string PurchaseToken;
+        //     public ReceiptWrapper(InAppPurchaseData purchaseData)
+        //     {
+        //         TransactionID = purchaseData.OrderID;
+        //         Payload = purchaseData.DeveloperPayload;
+        //         PurchaseToken = purchaseData.PurchaseToken;
+        //         product = purchaseData.ProductId;
+        //     }
+        //         
+        // }
+
         string CreateReciept(InAppPurchaseData purchaseData)
         {
             var sb = new StringBuilder(1024);
-
+            
             sb.Append('{').Append("\"Store\":\"AppGallery\",\"TransactionID\":\"").Append(purchaseData.OrderID).Append("\", \"Payload\":{ ");
             sb.Append("\"product\":\"").Append(purchaseData.ProductId).Append("\"");
             sb.Append('}');
             sb.Append('}');
             return sb.ToString();
-
+            // return JsonUtility.ToJson(new ReceiptWrapper(purchaseData));
         }
 
 
@@ -230,6 +262,26 @@ namespace HmsPlugin
                 });
         }
 
+        class PurchaseReceipt
+        {
+            public string purchaseData;
+            public string signData;
+            
+            public PurchaseReceipt(PurchaseResultInfo purchaseResultInfo)
+            {
+                purchaseData = purchaseResultInfo.InAppPurchaseData;
+                signData = purchaseResultInfo.InAppDataSignature;
+            }
+        }
+        
+        string GetPurchaseReceipt(PurchaseResultInfo purchaseResultInfo)
+        {
+            var receipt = new PurchaseReceipt(purchaseResultInfo);
+            var json = JsonUtility.ToJson(receipt);
+
+            return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+        }
+
         void PurchaseInitentCreated(PurchaseIntentResult intentResult, ProductDefinition product)
         {
             if(intentResult == null)
@@ -249,7 +301,8 @@ namespace HmsPlugin
                     case OrderStatusCode.ORDER_STATE_SUCCESS:
                         var data = new InAppPurchaseData(purchaseResultInfo.InAppPurchaseData);
                         this.purchasedData[product.storeSpecificId] = data;
-                        storeEvents.OnPurchaseSucceeded(product.storeSpecificId, purchaseResultInfo.InAppDataSignature, data.OrderID );
+                        
+                        storeEvents.OnPurchaseSucceeded(product.storeSpecificId, GetPurchaseReceipt(purchaseResultInfo), data.OrderID );
                         break;
 
                     case OrderStatusCode.ORDER_PRODUCT_OWNED:

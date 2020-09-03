@@ -27,18 +27,28 @@ namespace HmsPlugin
         public Action<AuthHuaweiId> OnSignInSuccess { get; set; }
         public Action<HMSException> OnSignInFailed { get; set; }
 
-        private HuaweiIdAuthService authService;
+        private HuaweiIdAuthService _authService;
+
+        private HuaweiIdAuthService authService
+        {
+            get
+            {
+                if (_authService == null)
+                {
+                    _authService = DefaultAuthService;
+                }
+                return _authService;
+            }
+        }
 
         // Start is called before the first frame update
-        void Awake()
-        {
-            Debug.Log("[HMS]: AWAKE AUTHSERVICE");
-            authService = DefaultAuthService;
-        }
+        // void Start()
+        // {
+        //     authService = DefaultAuthService;
+        // }
 
         public void SignIn()
         {
-            Debug.Log("[HMS]: Sign in " + authService);
             authService.StartSignIn((authId) =>
             {
                 HuaweiId = authId;
